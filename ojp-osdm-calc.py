@@ -118,7 +118,7 @@ class Fare:
         self.individualContracts = individualContracts
 
 def send_request(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time=None):
-    url = "http://OJP-EFA01-P.mentzsbb.local/ojp/ojp"
+    url = "https://odpch-api.clients.liip.ch/ojp-int-linux"
     headers = {
         "Content-Type": "text/xml",
         "Authorization": "Bearer eyJvcmciOiI2M2Q4ODhiMDNmZmRmODAwMDEzMDIwODkiLCJpZCI6IjZkYzViNTFjNjFlNzQyY2E4YjNhYzQ0YzQyZGY0MTY1IiwiaCI6Im11cm11cjEyOCJ9"
@@ -168,7 +168,7 @@ def send_request(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time
     response = requests.post(url, headers=headers, data=data)
     return response
 
-def send_request_via(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time=None):
+def send_request_via(origin_stop_point_ref, destination_stop_point_ref, via_stop_point_ref, dep_arr_time=None):
     url = "http://OJP-EFA01-P.mentzsbb.local/ojp/ojp"
     headers = {
         "Content-Type": "text/xml",
@@ -183,49 +183,37 @@ def send_request_via(origin_stop_point_ref, destination_stop_point_ref, dep_arr_
 <OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.siri.org.uk/siri" version="1.0" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
     <OJPRequest>
         <ServiceRequest>
-            <RequestTimestamp>2023-09-21T12:32:41.980Z</RequestTimestamp>
+            <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
             <RequestorRef>SBBQuovadislayout</RequestorRef>
             <ojp:OJPTripRequest>
-                <RequestTimestamp>2023-09-21T12:32:41.980Z</RequestTimestamp>
+                <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
                 <ojp:Origin>
                     <ojp:PlaceRef>
-                        <StopPointRef>8504484</StopPointRef>
+                        <StopPointRef>{origin_stop_point_ref}</StopPointRef>
                         <ojp:LocationName>
-                            <ojp:Text>Müntschemier</ojp:Text>
+                            <ojp:Text></ojp:Text>
                         </ojp:LocationName>
                     </ojp:PlaceRef>
-                    <ojp:DepArrTime>2023-09-21T12:32:00Z</ojp:DepArrTime>
+                    <ojp:DepArrTime>{dep_arr_time}</ojp:DepArrTime>
                 </ojp:Origin>
                 <ojp:Destination>
                     <ojp:PlaceRef>
-                        <StopPointRef>8507000</StopPointRef>
+                        <StopPointRef>{destination_stop_point_ref}</StopPointRef>
                         <ojp:LocationName>
-                            <ojp:Text>Bern</ojp:Text>
+                            <ojp:Text></ojp:Text>
                         </ojp:LocationName>
                     </ojp:PlaceRef>
                 </ojp:Destination>
                 <ojp:Via>
                     <ojp:ViaPoint>
-                        <StopPointRef>8504483</StopPointRef>
+                        <StopPointRef>{via_stop_point_ref}</StopPointRef>
                         <ojp:LocationName>
                             <ojp:Text>Ins</ojp:Text>
                         </ojp:LocationName>
                     </ojp:ViaPoint>
                 </ojp:Via>
                 <ojp:Params>
-                    <ojp:PtModeFilter>
-                        <ojp:Exclude>false</ojp:Exclude>
-                        <ojp:PtMode>rail</ojp:PtMode>
-                        <ojp:PtMode>urbanRail</ojp:PtMode>
-                        <ojp:PtMode>tram</ojp:PtMode>
-                        <ojp:PtMode>metro</ojp:PtMode>
-                        <ojp:PtMode>bus</ojp:PtMode>
-                        <ojp:PtMode>water</ojp:PtMode>
-                        <ojp:PtMode>funicular</ojp:PtMode>
-                        <ojp:PtMode>telecabin</ojp:PtMode>
-                    </ojp:PtModeFilter>
-                    <ojp:NumberOfResults>4</ojp:NumberOfResults>
-                    <ojp:IgnoreRealtimeData>false</ojp:IgnoreRealtimeData>
+                    <ojp:NumberOfResults>5</ojp:NumberOfResults>
                     <ojp:IncludeIntermediateStops>true</ojp:IncludeIntermediateStops>
                 </ojp:Params>
             </ojp:OJPTripRequest>
@@ -409,9 +397,21 @@ def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, t
     
     return tripsFare
 
+def print_trip_details(tripsFare):        
+    tripNumberIndex = 1
+    for trip in tripsFare.trips:
+        print(f"For Trip {tripNumberIndex} from {trip.startText} to {trip.endText} the direct fare is {trip.directFare} and the calculated fare is {trip.calculatedFare}")
+        tripNumberIndex+=1
+        legFareIndex = 1
+        for legFare in trip.legsFare:
+            print(f"\tThe leg {legFareIndex} from {legFare.startText} to {legFare.endText} has a fare of {legFare.fare}")
+            legFareIndex+=1
+
+# -------------------------------------------------------------------------------------------------------------------------
 
 tripStart = "8504484"
 tripEnd = "8507000"
+viaPoint = None
 #Either use BASIC (2nd class) or HIGH (1st class)
 serviceClassRef = "BASIC"
 #Either use YOUNG_CHILD, PRM_CHILD, CHILD or ADULT
@@ -420,22 +420,16 @@ passengerConstraint = "ADULT"
 reductionConstraintRef = None
 
 #getTrips
-response = send_request(tripStart, tripEnd)
-trips = parse_xml_to_trips(response)
-# Usage
-filename = "osdm_delivery_10_7.json"
-fares, regionalConstraints, prices = parse_json_file(filename)
-tripsFare = calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, tripEnd, passengerConstraint, reductionConstraintRef, serviceClassRef)
+if viaPoint is None:
+    response = send_request(tripStart, tripEnd)
+else:
+    response = send_request_via(tripStart, tripEnd, viaPoint)
 
-        
-tripNumberIndex = 1
-for trip in tripsFare.trips:
-    print(f"For Trip {tripNumberIndex} from {trip.startText} to {trip.endText} the direct fare is {trip.directFare} and the calculated fare is {trip.calculatedFare}")
-    tripNumberIndex+=1
-    legFareIndex = 1
-    for legFare in trip.legsFare:
-        print(f"\tThe leg {legFareIndex} from {legFare.startText} to {legFare.endText} has a fare of {legFare.fare}")
-        legFareIndex+=1
+trips = parse_xml_to_trips(response)
+fares, regionalConstraints, prices = parse_json_file("osdm_delivery_10_7.json")
+tripsFare = calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, tripEnd, passengerConstraint, reductionConstraintRef, serviceClassRef)
+print_trip_details(tripsFare)
+
         
         
                 
