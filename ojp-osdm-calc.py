@@ -37,6 +37,25 @@ class LegIntermediate:
         self.text = None
         # Add other attributes as needed
 
+class LegsFare:
+    def __init__(self):
+        self.startText:str = None
+        self.endText:str = None
+        self.fare:int = None
+
+class TripFare:
+    def __init__(self):
+        self.startText:str = None
+        self.endText:str = None
+        self.directFare:int = 0
+        self.calculatedFare:int = 0
+        self.legsFare = []
+        self.nolegsNeeded:bool = None
+
+class TripsFare:
+    def __init__(self):
+        self.trips = []
+
 # Define the data classes
 @dataclass
 class subPrice:
@@ -44,12 +63,10 @@ class subPrice:
     amount: int
     scale: int
 
-
 @dataclass
 class Price:
     id: str
     price: List[subPrice]
-
 
 # Define updated data classes
 @dataclass
@@ -100,7 +117,6 @@ class Fare:
         self.legacyConversion = legacyConversion
         self.individualContracts = individualContracts
 
-
 def send_request(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time=None):
     url = "http://OJP-EFA01-P.mentzsbb.local/ojp/ojp"
     headers = {
@@ -149,6 +165,73 @@ def send_request(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time
 
 
 
+    response = requests.post(url, headers=headers, data=data)
+    return response
+
+def send_request_via(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time=None):
+    url = "http://OJP-EFA01-P.mentzsbb.local/ojp/ojp"
+    headers = {
+        "Content-Type": "text/xml",
+        "Authorization": "Bearer eyJvcmciOiI2M2Q4ODhiMDNmZmRmODAwMDEzMDIwODkiLCJpZCI6IjZkYzViNTFjNjFlNzQyY2E4YjNhYzQ0YzQyZGY0MTY1IiwiaCI6Im11cm11cjEyOCJ9"
+    }
+
+    # If dep_arr_time is not given, use the current time
+    if not dep_arr_time:
+        dep_arr_time = datetime.utcnow().isoformat() + "Z"
+
+    data = f"""<?xml version="1.0"?>
+<OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.siri.org.uk/siri" version="1.0" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
+    <OJPRequest>
+        <ServiceRequest>
+            <RequestTimestamp>2023-09-21T12:32:41.980Z</RequestTimestamp>
+            <RequestorRef>SBBQuovadislayout</RequestorRef>
+            <ojp:OJPTripRequest>
+                <RequestTimestamp>2023-09-21T12:32:41.980Z</RequestTimestamp>
+                <ojp:Origin>
+                    <ojp:PlaceRef>
+                        <StopPointRef>8504484</StopPointRef>
+                        <ojp:LocationName>
+                            <ojp:Text>Müntschemier</ojp:Text>
+                        </ojp:LocationName>
+                    </ojp:PlaceRef>
+                    <ojp:DepArrTime>2023-09-21T12:32:00Z</ojp:DepArrTime>
+                </ojp:Origin>
+                <ojp:Destination>
+                    <ojp:PlaceRef>
+                        <StopPointRef>8507000</StopPointRef>
+                        <ojp:LocationName>
+                            <ojp:Text>Bern</ojp:Text>
+                        </ojp:LocationName>
+                    </ojp:PlaceRef>
+                </ojp:Destination>
+                <ojp:Via>
+                    <ojp:ViaPoint>
+                        <StopPointRef>8504483</StopPointRef>
+                        <ojp:LocationName>
+                            <ojp:Text>Ins</ojp:Text>
+                        </ojp:LocationName>
+                    </ojp:ViaPoint>
+                </ojp:Via>
+                <ojp:Params>
+                    <ojp:PtModeFilter>
+                        <ojp:Exclude>false</ojp:Exclude>
+                        <ojp:PtMode>rail</ojp:PtMode>
+                        <ojp:PtMode>urbanRail</ojp:PtMode>
+                        <ojp:PtMode>tram</ojp:PtMode>
+                        <ojp:PtMode>metro</ojp:PtMode>
+                        <ojp:PtMode>bus</ojp:PtMode>
+                        <ojp:PtMode>water</ojp:PtMode>
+                        <ojp:PtMode>funicular</ojp:PtMode>
+                        <ojp:PtMode>telecabin</ojp:PtMode>
+                    </ojp:PtModeFilter>
+                    <ojp:NumberOfResults>4</ojp:NumberOfResults>
+                    <ojp:IgnoreRealtimeData>false</ojp:IgnoreRealtimeData>
+                    <ojp:IncludeIntermediateStops>true</ojp:IncludeIntermediateStops>
+                </ojp:Params>
+            </ojp:OJPTripRequest>
+        </ServiceRequest>
+    </OJPRequest>
+</OJP>"""
     response = requests.post(url, headers=headers, data=data)
     return response
 
@@ -247,23 +330,28 @@ def search_for_regional_constraint(regional_constraints: List[RegionalConstraint
     return None
 
 def search_for_fare(fares: List[Fare], 
-                                   regionalConstraintRef: str,
-                                   passengerConstraintRef: str,
-                                   reductionConstraintRef: str) -> Optional[Fare]:
+                   regionalConstraintRef: str,
+                   passengerConstraintRef: str,
+                   serviceClassRef,
+                   reductionConstraintRef: Optional[str] = None) -> Optional[Fare]:
     """
-    Search for a RegionalConstraint with a specific entryConnectionPointId and exitConnectionPointId within a given list.
+    Search for a Fare with a specific regionalConstraintRef, passengerConstraintRef, and reductionConstraintRef within a given list.
     
     Parameters:
-    - regional_constraints: the list of RegionalConstraint objects.
-    - entry_id: the entryConnectionPointId to search for.
-    - exit_id: the exitConnectionPointId to search for.
+    - fares: the list of Fare objects.
+    - regionalConstraintRef: the regionalConstraintRef to search for.
+    - passengerConstraintRef: the passengerConstraintRef to search for.
+    - reductionConstraintRef: the reductionConstraintRef to search for.
 
     Returns:
-    - The found RegionalConstraint object or None if not found.
+    - The found Fare object or None if not found.
     """
     for fare in fares:
-        if fare.regionalConstraintRef == regionalConstraintRef and fare.passengerConstraintRef == passengerConstraintRef and fare.reductionConstraintRef == reductionConstraintRef:
-            return fare
+        if fare.regionalConstraintRef == regionalConstraintRef and fare.passengerConstraintRef == passengerConstraintRef and fare.serviceClassRef == serviceClassRef:
+            if fare.reductionConstraintRef == reductionConstraintRef:
+                return fare
+            if fare.reductionConstraintRef is None and reductionConstraintRef is None:
+                return fare
     return None
 
 def get_amount(prices: List[Price], 
@@ -284,18 +372,74 @@ def get_amount(prices: List[Price],
             return price
     return None
 
-#getTrips
-response = send_request("8503000", "8507000")
-trips = parse_xml_to_trips(response)
+def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, tripEnd, passengerConstraint, reductionConstraintRef, serviceClassRef):
+    tripsFare = TripsFare()
 
+    for trip in trips:
+        tripFare = TripFare()
+        
+        # search for fare price from beginning to end
+        regionalConstraint = search_for_regional_constraint(regionalConstraints, tripStart, tripEnd)
+        if regionalConstraint is not None:
+            fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
+            price = get_amount(prices, fare.priceRef)
+            tripFare.nolegsNeeded = True
+            tripFare.directFare = price.price[0]["amount"]
+        else:
+            tripFare.nolegsNeeded = False
+        
+        # search for calculated fare price through the legs
+        for leg in trip.leg_details:
+            legsFare = LegsFare()
+            legsFare.startText = leg.text_board_elem
+            legsFare.endText = leg.text_alight_elem
+            
+            # search for fare price from beginning to end of leg
+            regionalConstraint = search_for_regional_constraint(regionalConstraints, leg.board_elem, leg.alight_elem)
+            if regionalConstraint is not None:
+                fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
+                price = get_amount(prices, fare.priceRef)
+                if price.price[0]["amount"] is not None:
+                    legsFare.fare = price.price[0]["amount"]
+            else:
+                legsFare.fare = 0
+            tripFare.calculatedFare += legsFare.fare
+            tripFare.legsFare.append(legsFare)
+        tripsFare.trips.append(tripFare)
+    
+    return tripsFare
+
+
+tripStart = "8504484"
+tripEnd = "8507000"
+#Either use BASIC (2nd class) or HIGH (1st class)
+serviceClassRef = "BASIC"
+#Either use YOUNG_CHILD, PRM_CHILD, CHILD or ADULT
+passengerConstraint = "ADULT"
+#Either use HALBTAX_CONSTRAINT, or None  
+reductionConstraintRef = None
+
+#getTrips
+response = send_request(tripStart, tripEnd)
+trips = parse_xml_to_trips(response)
 # Usage
 filename = "osdm_delivery_10_7.json"
 fares, regionalConstraints, prices = parse_json_file(filename)
-regionalConstraint = search_for_regional_constraint(regionalConstraints, "8503000", "8507000")
-fare = search_for_fare(fares, regionalConstraint.id, "ADULT", "HALBTAX_CONSTRAINT")
-price = get_amount(prices, fare.priceRef)
-amount = price.price[0]["amount"]
-print(amount)
+tripsFare = calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, tripEnd, passengerConstraint, reductionConstraintRef, serviceClassRef)
+
+        
+tripNumberIndex = 1
+for trip in tripsFare.trips:
+    print(f"For Trip {tripNumberIndex} from {trip.startText} to {trip.endText} the direct fare is {trip.directFare} and the calculated fare is {trip.calculatedFare}")
+    tripNumberIndex+=1
+    legFareIndex = 1
+    for legFare in trip.legsFare:
+        print(f"\tThe leg {legFareIndex} from {legFare.startText} to {legFare.endText} has a fare of {legFare.fare}")
+        legFareIndex+=1
+        
+        
+                
+        
 
 
 
