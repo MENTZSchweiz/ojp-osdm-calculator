@@ -51,6 +51,8 @@ class TripFare:
         self.calculatedFare:int = 0
         self.legsFare = []
         self.nolegsNeeded:bool = None
+        self.startTime:str = None
+        self.endTime:str = None
 
 class TripsFare:
     def __init__(self):
@@ -117,7 +119,11 @@ class Fare:
         self.legacyConversion = legacyConversion
         self.individualContracts = individualContracts
 
-def send_request(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time=None):
+class StopPointInformation:
+    stopPointRef: str
+    stopPointText: str
+
+def getStopPlaceRefFromLocation(location,  dep_arr_time=None):
     url = "https://odpch-api.clients.liip.ch/ojp-int-linux"
     headers = {
         "Content-Type": "text/xml",
@@ -128,48 +134,45 @@ def send_request(origin_stop_point_ref, destination_stop_point_ref, dep_arr_time
     if not dep_arr_time:
         dep_arr_time = datetime.utcnow().isoformat() + "Z"
 
-    data = f"""<?xml version="1.0" encoding="UTF-8"?>
-<OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.siri.org.uk/siri" version="1.0" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
-    <OJPRequest>
-        <ServiceRequest>
-            <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
-            <RequestorRef>MENTZ-Postman-Test</RequestorRef>
-            <ojp:OJPTripRequest>
-                <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
-                <MessageIdentifier>756</MessageIdentifier>
-                <ojp:Origin>
-                    <ojp:PlaceRef>
-                        <StopPointRef>{origin_stop_point_ref}</StopPointRef>
-                        <ojp:LocationName>
-                            <ojp:Text> </ojp:Text>
-                        </ojp:LocationName>
-                    </ojp:PlaceRef>
-                    <ojp:DepArrTime>{dep_arr_time}</ojp:DepArrTime>
-                </ojp:Origin>
-                <ojp:Destination>
-                    <ojp:PlaceRef>
-                        <StopPointRef>{destination_stop_point_ref}</StopPointRef>
-                        <ojp:LocationName>
-							<ojp:Text> </ojp:Text>
-						</ojp:LocationName>
-                    </ojp:PlaceRef>
-                </ojp:Destination>
-                <ojp:Params>
-                    <ojp:NumberOfResults>5</ojp:NumberOfResults>
-                    <ojp:IncludeIntermediateStops>true</ojp:IncludeIntermediateStops>
-                </ojp:Params>
-            </ojp:OJPTripRequest>
-        </ServiceRequest>
-    </OJPRequest>
-</OJP>"""
+    data = f"""<?xml version="1.0" encoding="utf-8"?>
+                <OJP xmlns="http://www.siri.org.uk/siri" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd" version="1.0">
+                <OJPRequest>
+                    <ServiceRequest>
+                    <RequestorRef>OJP SDK v1.0</RequestorRef>
+                    <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
+                    <ojp:OJPLocationInformationRequest>
+                        <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
+                        <ojp:InitialInput>
+                        <ojp:LocationName>{location}</ojp:LocationName>
+                        </ojp:InitialInput>
+                        <ojp:Restrictions>
+                        <ojp:NumberOfResults>1</ojp:NumberOfResults>
+                        </ojp:Restrictions>
+                        <Extensions>
+                        <ParamsExtension>
+                            <PrivateModeFilter>
+                            <Exclude>false</Exclude>
+                            </PrivateModeFilter>
+                        </ParamsExtension>
+                        </Extensions>
+                    </ojp:OJPLocationInformationRequest>
+                    </ServiceRequest>
+                </OJPRequest>
+                </OJP>"""
 
 
 
     response = requests.post(url, headers=headers, data=data)
-    return response
+    ET.register_namespace('siri',"http://www.siri.org.uk/siri") #some name
+    ET.register_namespace('ojp',"http://www.vdv.de/ojp") #some name
+    tree = ET.ElementTree(ET.fromstring(response.text))
+    stopPointInformation = StopPointInformation() 
+    stopPointInformation.stopPointRef = tree.find('.//{http://www.vdv.de/ojp}StopPlaceRef').text
+    stopPointInformation.stopPointText = tree.find('.//{http://www.vdv.de/ojp}StopPlaceName/{http://www.vdv.de/ojp}Text').text
+    return stopPointInformation
 
-def send_request_via(origin_stop_point_ref, destination_stop_point_ref, via_stop_point_ref, dep_arr_time=None):
-    url = "http://OJP-EFA01-P.mentzsbb.local/ojp/ojp"
+def send_request(originStopPointInformation, destinationStopPointInformation,  viaStopPointInformation=None,  dep_arr_time=None):
+    url = "https://odpch-api.clients.liip.ch/ojp-int-linux"
     headers = {
         "Content-Type": "text/xml",
         "Authorization": "Bearer eyJvcmciOiI2M2Q4ODhiMDNmZmRmODAwMDEzMDIwODkiLCJpZCI6IjZkYzViNTFjNjFlNzQyY2E4YjNhYzQ0YzQyZGY0MTY1IiwiaCI6Im11cm11cjEyOCJ9"
@@ -179,47 +182,55 @@ def send_request_via(origin_stop_point_ref, destination_stop_point_ref, via_stop
     if not dep_arr_time:
         dep_arr_time = datetime.utcnow().isoformat() + "Z"
 
-    data = f"""<?xml version="1.0"?>
-<OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.siri.org.uk/siri" version="1.0" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
-    <OJPRequest>
-        <ServiceRequest>
-            <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
-            <RequestorRef>SBBQuovadislayout</RequestorRef>
-            <ojp:OJPTripRequest>
-                <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
-                <ojp:Origin>
-                    <ojp:PlaceRef>
-                        <StopPointRef>{origin_stop_point_ref}</StopPointRef>
-                        <ojp:LocationName>
-                            <ojp:Text></ojp:Text>
-                        </ojp:LocationName>
-                    </ojp:PlaceRef>
-                    <ojp:DepArrTime>{dep_arr_time}</ojp:DepArrTime>
-                </ojp:Origin>
-                <ojp:Destination>
-                    <ojp:PlaceRef>
-                        <StopPointRef>{destination_stop_point_ref}</StopPointRef>
-                        <ojp:LocationName>
-                            <ojp:Text></ojp:Text>
-                        </ojp:LocationName>
-                    </ojp:PlaceRef>
-                </ojp:Destination>
-                <ojp:Via>
-                    <ojp:ViaPoint>
-                        <StopPointRef>{via_stop_point_ref}</StopPointRef>
-                        <ojp:LocationName>
-                            <ojp:Text>Ins</ojp:Text>
-                        </ojp:LocationName>
-                    </ojp:ViaPoint>
-                </ojp:Via>
-                <ojp:Params>
-                    <ojp:NumberOfResults>5</ojp:NumberOfResults>
-                    <ojp:IncludeIntermediateStops>true</ojp:IncludeIntermediateStops>
-                </ojp:Params>
-            </ojp:OJPTripRequest>
-        </ServiceRequest>
-    </OJPRequest>
-</OJP>"""
+        via_point = ""
+        if viaStopPointInformation is not None: 
+            via_point = f"""<ojp:Via>
+                        <ojp:ViaPoint>
+                            <StopPointRef>{viaStopPointInformation.stopPointRef}</StopPointRef>
+                            <ojp:LocationName>
+                                <ojp:Text>{viaStopPointInformation.stopPointText}</ojp:Text>
+                            </ojp:LocationName>
+                        </ojp:ViaPoint>
+                    </ojp:Via>"""
+    
+    
+    data = f"""<?xml version="1.0" encoding="UTF-8"?>
+                <OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.siri.org.uk/siri" version="1.0" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
+                    <OJPRequest>
+                        <ServiceRequest>
+                            <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
+                            <RequestorRef>MENTZ-Postman-Test</RequestorRef>
+                            <ojp:OJPTripRequest>
+                                <RequestTimestamp>{dep_arr_time}</RequestTimestamp>
+                                <MessageIdentifier>756</MessageIdentifier>
+                                <ojp:Origin>
+                                    <ojp:PlaceRef>
+                                        <StopPointRef>{originStopPointInformation.stopPointRef}</StopPointRef>
+                                        <ojp:LocationName>
+                                            <ojp:Text>{originStopPointInformation.stopPointText}</ojp:Text>
+                                        </ojp:LocationName>
+                                    </ojp:PlaceRef>
+                                    <ojp:DepArrTime>{dep_arr_time}</ojp:DepArrTime>
+                                </ojp:Origin>
+                                <ojp:Destination>
+                                    <ojp:PlaceRef>
+                                        <StopPointRef>{destinationStopPointInformation.stopPointRef}</StopPointRef>
+                                        <ojp:LocationName>
+                                            <ojp:Text>{destinationStopPointInformation.stopPointText}</ojp:Text>
+                                        </ojp:LocationName>
+                                    </ojp:PlaceRef>
+                                </ojp:Destination>
+                                """ + via_point + """<ojp:Params>
+                                    <ojp:NumberOfResults>5</ojp:NumberOfResults>
+                                    <ojp:IncludeIntermediateStops>true</ojp:IncludeIntermediateStops>
+                                </ojp:Params>
+                            </ojp:OJPTripRequest>
+                        </ServiceRequest>
+                    </OJPRequest>
+                </OJP>"""
+
+
+
     response = requests.post(url, headers=headers, data=data)
     return response
 
@@ -365,7 +376,8 @@ def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, t
 
     for trip in trips:
         tripFare = TripFare()
-        
+        tripFare.startTime = trip.start_time
+        tripFare.endTime = trip.end_time
         # search for fare price from beginning to end
         regionalConstraint = search_for_regional_constraint(regionalConstraints, tripStart, tripEnd)
         if regionalConstraint is not None:
@@ -378,21 +390,22 @@ def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, t
         
         # search for calculated fare price through the legs
         for leg in trip.leg_details:
-            legsFare = LegsFare()
-            legsFare.startText = leg.text_board_elem
-            legsFare.endText = leg.text_alight_elem
-            
-            # search for fare price from beginning to end of leg
-            regionalConstraint = search_for_regional_constraint(regionalConstraints, leg.board_elem, leg.alight_elem)
-            if regionalConstraint is not None:
-                fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
-                price = get_amount(prices, fare.priceRef)
-                if price.price[0]["amount"] is not None:
-                    legsFare.fare = price.price[0]["amount"]
-            else:
-                legsFare.fare = 0
-            tripFare.calculatedFare += legsFare.fare
-            tripFare.legsFare.append(legsFare)
+            if leg.timedLeg == True:
+                legsFare = LegsFare()
+                legsFare.startText = leg.text_board_elem
+                legsFare.endText = leg.text_alight_elem
+                
+                # search for fare price from beginning to end of leg
+                regionalConstraint = search_for_regional_constraint(regionalConstraints, leg.board_elem, leg.alight_elem)
+                if regionalConstraint is not None:
+                    fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
+                    price = get_amount(prices, fare.priceRef)
+                    if price.price[0]["amount"] is not None:
+                        legsFare.fare = price.price[0]["amount"]
+                else:
+                    legsFare.fare = 0
+                tripFare.calculatedFare += legsFare.fare
+                tripFare.legsFare.append(legsFare)
         tripsFare.trips.append(tripFare)
     
     return tripsFare
@@ -400,7 +413,7 @@ def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, t
 def print_trip_details(tripsFare):        
     tripNumberIndex = 1
     for trip in tripsFare.trips:
-        print(f"For Trip {tripNumberIndex} from {trip.startText} to {trip.endText} the direct fare is {trip.directFare} and the calculated fare is {trip.calculatedFare}")
+        print(f"For Trip {tripNumberIndex} starting at {trip.startTime} and ending at {trip.endTime} the direct fare is {trip.directFare} and the calculated fare is {trip.calculatedFare}")
         tripNumberIndex+=1
         legFareIndex = 1
         for legFare in trip.legsFare:
@@ -409,9 +422,10 @@ def print_trip_details(tripsFare):
 
 # -------------------------------------------------------------------------------------------------------------------------
 
-tripStart = "8504484"
-tripEnd = "8507000"
-viaPoint = None
+locationStart = "Bern"
+locationEnd = "Luzern"
+viaPointlocation = "Langnau"
+
 #Either use BASIC (2nd class) or HIGH (1st class)
 serviceClassRef = "BASIC"
 #Either use YOUNG_CHILD, PRM_CHILD, CHILD or ADULT
@@ -419,19 +433,24 @@ passengerConstraint = "ADULT"
 #Either use HALBTAX_CONSTRAINT, or None  
 reductionConstraintRef = None
 
+#get didok
+tripStart = getStopPlaceRefFromLocation(locationStart)
+tripEnd = getStopPlaceRefFromLocation(locationEnd)
+viaPoint = None
+if viaPointlocation is not None:
+    viaPoint = getStopPlaceRefFromLocation(viaPointlocation)
 #getTrips
-if viaPoint is None:
-    response = send_request(tripStart, tripEnd)
-else:
-    response = send_request_via(tripStart, tripEnd, viaPoint)
-
+response = send_request(tripStart, tripEnd, viaPoint)
 trips = parse_xml_to_trips(response)
+#parse fares
 fares, regionalConstraints, prices = parse_json_file("osdm_delivery_10_7.json")
+# get fares from trip
 tripsFare = calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, tripEnd, passengerConstraint, reductionConstraintRef, serviceClassRef)
+print(f"Following trips were found from {tripStart.stopPointText} to {tripEnd.stopPointText} via {viaPoint.stopPointText}")
 print_trip_details(tripsFare)
 
         
-        
+
                 
         
 
