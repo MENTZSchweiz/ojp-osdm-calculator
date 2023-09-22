@@ -39,9 +39,9 @@ locationStart = "Bern"
 locationEnd = "Luzern"
 viaPointlocation = "Langnau"
 
-# Either use BASIC (2nd class) or HIGH (1st class)
+# Either use "BASIC" (2nd class) or "HIGH" (1st class)
 serviceClassRef = "BASIC"
-# Either use YOUNG_CHILD, PRM_CHILD, CHILD or ADULT
+# Either use "YOUNG_CHILD", "PRM_CHILD", "CHILD" or "ADULT"
 passengerConstraint = "ADULT"
-# Either use HALBTAX_CONSTRAINT, or None  
+# Either use "HALBTAX_CONSTRAINT", or None  
 reductionConstraintRef = None
