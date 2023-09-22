@@ -424,7 +424,7 @@ def print_trip_details(tripsFare):
 
 locationStart = "Bern"
 locationEnd = "Luzern"
-viaPointlocation = "Langnau"
+viaPointlocation = None
 
 #Either use BASIC (2nd class) or HIGH (1st class)
 serviceClassRef = "BASIC"
@@ -446,7 +446,7 @@ trips = parse_xml_to_trips(response)
 fares, regionalConstraints, prices = parse_json_file("osdm_delivery_10_7.json")
 # get fares from trip
 tripsFare = calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, tripEnd, passengerConstraint, reductionConstraintRef, serviceClassRef)
-print(f"Following trips were found from {tripStart.stopPointText} to {tripEnd.stopPointText} via {viaPoint.stopPointText}")
+print(f"Following trips were found from {tripStart.stopPointText} to {tripEnd.stopPointText}" + (f" via {viaPoint.stopPointText}" if viaPoint else ""))
 print_trip_details(tripsFare)
 
         
