@@ -323,10 +323,12 @@ def search_for_regional_constraint(regional_constraints: List[RegionalConstraint
     Returns:
     - The found RegionalConstraint object or None if not found.
     """
+    foundConstraints = []
+    
     for rc in regional_constraints:
         if rc.entryConnectionPointId == entry_id and rc.exitConnectionPointId == exit_id:
-            return rc
-    return None
+            foundConstraints.append(rc)
+    return foundConstraints
 
 def search_for_fare(fares: List[Fare], 
                    regionalConstraintRef: str,
@@ -371,6 +373,23 @@ def get_amount(prices: List[Price],
             return price
     return None
 
+def validate_regionalConstraint(regionalConstraint, leg):
+    for regionalValidity in regionalConstraint.regionalValidity:
+        for route in regionalValidity['viaStations']['route']:               
+            foundIntermediateLegInRoute = False
+            if 'station' in route:
+                routePoint = route['station']['code']
+            if 'alternativeRoute' in route:
+                routePoint = route['alternativeRoute'][0]['station']['code']
+                routePoint = routePoint+route['alternativeRoute'][1]['station']['code']
+            for intemediate_leg in leg.intermediate_legs:
+                if intemediate_leg.stoppointref in routePoint or leg.board_elem in routePoint or leg.alight_elem in routePoint:
+                    foundIntermediateLegInRoute = True
+            if foundIntermediateLegInRoute is not True:
+                return False
+        return True
+
+
 def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, tripEnd, passengerConstraint, reductionConstraintRef, serviceClassRef):
     tripsFare = TripsFare()
 
@@ -379,14 +398,14 @@ def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, t
         tripFare.startTime = trip.start_time
         tripFare.endTime = trip.end_time
         # search for fare price from beginning to end
-        regionalConstraint = search_for_regional_constraint(regionalConstraints, tripStart, tripEnd)
-        if regionalConstraint is not None:
-            fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
-            price = get_amount(prices, fare.priceRef)
-            tripFare.nolegsNeeded = True
-            tripFare.directFare = price.price[0]["amount"]
-        else:
-            tripFare.nolegsNeeded = False
+        # foundConstraints = search_for_regional_constraint(regionalConstraints, tripStart.stopPointRef, tripEnd.stopPointRef)
+        # for regionalConstraint in foundConstraints:
+        #     fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
+        #     price = get_amount(prices, fare.priceRef)
+        #     tripFare.nolegsNeeded = True
+        #     tripFare.directFare = price.price[0]["amount"]
+        # else:
+        #     tripFare.nolegsNeeded = False
         
         # search for calculated fare price through the legs
         for leg in trip.leg_details:
@@ -396,24 +415,24 @@ def calculate_trips_fare(trips, regionalConstraints, fares, prices, tripStart, t
                 legsFare.endText = leg.text_alight_elem
                 
                 # search for fare price from beginning to end of leg
-                regionalConstraint = search_for_regional_constraint(regionalConstraints, leg.board_elem, leg.alight_elem)
-                if regionalConstraint is not None:
-                    fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
-                    price = get_amount(prices, fare.priceRef)
-                    if price.price[0]["amount"] is not None:
-                        legsFare.fare = price.price[0]["amount"]
-                else:
-                    legsFare.fare = 0
+                foundConstraints = search_for_regional_constraint(regionalConstraints, leg.board_elem, leg.alight_elem)
+                legsFare.fare = 0
+                for regionalConstraint in foundConstraints:
+                    if validate_regionalConstraint(regionalConstraint, leg):      
+                        fare = search_for_fare(fares, regionalConstraint.id, passengerConstraint, serviceClassRef, reductionConstraintRef)
+                        price = get_amount(prices, fare.priceRef)
+                        if price.price[0]["amount"] is not None:
+                            legsFare.fare = price.price[0]["amount"]
+                            break
                 tripFare.calculatedFare += legsFare.fare
                 tripFare.legsFare.append(legsFare)
-        tripsFare.trips.append(tripFare)
-    
+                tripsFare.trips.append(tripFare)
     return tripsFare
 
 def print_trip_details(tripsFare):        
     tripNumberIndex = 1
     for trip in tripsFare.trips:
-        print(f"For Trip {tripNumberIndex} starting at {trip.startTime} and ending at {trip.endTime} the direct fare is {trip.directFare} and the calculated fare is {trip.calculatedFare}")
+        print(f"For Trip {tripNumberIndex} starting at {trip.startTime} and ending at {trip.endTime}, the calculated fare is {trip.calculatedFare}")
         tripNumberIndex+=1
         legFareIndex = 1
         for legFare in trip.legsFare:
@@ -424,7 +443,7 @@ def print_trip_details(tripsFare):
 
 locationStart = "Bern"
 locationEnd = "Luzern"
-viaPointlocation = None
+viaPointlocation = "Langnau"
 
 #Either use BASIC (2nd class) or HIGH (1st class)
 serviceClassRef = "BASIC"
